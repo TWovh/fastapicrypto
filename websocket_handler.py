@@ -1,6 +1,7 @@
 import asyncio
 import json
 import websockets
+import httpx
 from typing import Dict, Set, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 import logging
@@ -195,20 +196,17 @@ class CryptoWebSocketHandler:
                     
                     await self.update_prices(prices)
                     
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    logger.warning("Превышен лимит запросов к API. Попробуйте позже.")
+                else:
+                    logger.error(f"HTTP ошибка при получении данных: {e}")
+                # Не обновляем цены при ошибке
             except Exception as e:
                 logger.error(f"Ошибка при получении данных: {e}")
-                # В случае ошибки используем симуляцию
-                import random
-                sample_prices = {
-                    "BTC": 45000 + random.uniform(-1000, 1000),
-                    "ETH": 3000 + random.uniform(-100, 100),
-                    "ADA": 1.5 + random.uniform(-0.1, 0.1),
-                    "DOT": 25 + random.uniform(-2, 2),
-                    "LINK": 30 + random.uniform(-3, 3)
-                }
-                await self.update_prices(sample_prices)
+                # Не обновляем цены при ошибке
             
-            await asyncio.sleep(30)  # Обновление каждые 30 секунд
+            await asyncio.sleep(60)  # Увеличиваем интервал до 60 секунд
 
     def stop_price_monitoring(self):
         """Остановка мониторинга цен"""

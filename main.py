@@ -8,6 +8,7 @@ import os
 from dotenv import load_dotenv
 from websocket_handler import websocket_handler
 from technical_analysis import TechnicalAnalysis
+import datetime
 
 load_dotenv()
 
@@ -59,6 +60,8 @@ class MarketData(BaseModel):
     top_gainers: List[CryptoPrice]
     top_losers: List[CryptoPrice]
 
+
+
 # Конфигурация
 COINGECKO_API_BASE = "https://api.coingecko.com/api/v3"
 
@@ -74,6 +77,8 @@ async def root():
             "search": "/crypto/search/{query}",
             "market_data": "/crypto/market-data",
             "trending": "/crypto/trending",
+            "technical_analysis": "/crypto/{coin_id}/technical-analysis",
+            "price_history": "/crypto/{coin_id}/price-history",
             "websocket": "/ws"
         }
     }
@@ -115,6 +120,11 @@ async def get_crypto_prices(limit: int = 20, currency: str = "usd"):
                 ))
             
             return crypto_prices
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 429:
+            raise HTTPException(status_code=429, detail="Превышен лимит запросов к API. Попробуйте позже.")
+        else:
+            raise HTTPException(status_code=500, detail=f"Ошибка при получении данных: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при получении данных: {str(e)}")
 
@@ -143,6 +153,11 @@ async def get_crypto_info(coin_id: str):
                 total_supply=market_data.get("total_supply"),
                 max_supply=market_data.get("max_supply")
             )
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 429:
+            raise HTTPException(status_code=429, detail="Превышен лимит запросов к API. Попробуйте позже.")
+        else:
+            raise HTTPException(status_code=404, detail=f"Криптовалюта не найдена: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Криптовалюта не найдена: {str(e)}")
 
@@ -159,6 +174,11 @@ async def search_crypto(query: str):
                 "query": query,
                 "results": data["coins"][:10]  # Возвращаем топ 10 результатов
             }
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 429:
+            raise HTTPException(status_code=429, detail="Превышен лимит запросов к API. Попробуйте позже.")
+        else:
+            raise HTTPException(status_code=500, detail=f"Ошибка при поиске: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при поиске: {str(e)}")
 
@@ -227,6 +247,11 @@ async def get_market_data():
                 top_gainers=top_gainers,
                 top_losers=top_losers
             )
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 429:
+            raise HTTPException(status_code=429, detail="Превышен лимит запросов к API. Попробуйте позже.")
+        else:
+            raise HTTPException(status_code=500, detail=f"Ошибка при получении рыночных данных: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при получении рыночных данных: {str(e)}")
 
@@ -235,26 +260,71 @@ async def get_trending_coins():
     """Получить трендовые криптовалюты"""
     try:
         async with httpx.AsyncClient() as client:
+            # Используем правильный эндпоинт для трендовых монет
             response = await client.get(f"{COINGECKO_API_BASE}/search/trending")
             response.raise_for_status()
             data = response.json()
             
             trending_coins = []
-            for coin in data["coins"]:
+            for coin in data.get("coins", []):
+                item = coin.get("item", {})
                 trending_coins.append({
-                    "id": coin["item"]["id"],
-                    "symbol": coin["item"]["symbol"].upper(),
-                    "name": coin["item"]["name"],
-                    "market_cap_rank": coin["item"]["market_cap_rank"],
-                    "price_btc": coin["item"]["price_btc"],
-                    "score": coin["item"]["score"]
+                    "id": item.get("id"),
+                    "symbol": item.get("symbol", "").upper(),
+                    "name": item.get("name"),
+                    "market_cap_rank": item.get("market_cap_rank"),
+                    "price_btc": item.get("price_btc"),
+                    "score": item.get("score")
                 })
             
             return {
-                "trending_coins": trending_coins
+                "trending_coins": trending_coins,
+                "total": len(trending_coins)
             }
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            # Если эндпоинт не найден, возвращаем топ монет по изменению цены
+            return await get_trending_alternative()
+        else:
+            raise HTTPException(status_code=500, detail=f"Ошибка при получении трендовых монет: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при получении трендовых монет: {str(e)}")
+
+async def get_trending_alternative():
+    """Альтернативный метод получения трендовых монет"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{COINGECKO_API_BASE}/coins/markets", params={
+                "vs_currency": "usd",
+                "order": "price_change_percentage_24h_desc",
+                "per_page": 10,
+                "page": 1,
+                "sparkline": False
+            })
+            response.raise_for_status()
+            data = response.json()
+            
+            trending_coins = []
+            for coin in data:
+                trending_coins.append({
+                    "id": coin["id"],
+                    "symbol": coin["symbol"].upper(),
+                    "name": coin["name"],
+                    "current_price": coin["current_price"],
+                    "price_change_percentage_24h": coin.get("price_change_percentage_24h"),
+                    "market_cap": coin.get("market_cap"),
+                    "volume_24h": coin.get("total_volume")
+                })
+            
+            return {
+                "trending_coins": trending_coins,
+                "total": len(trending_coins),
+                "note": "Показаны топ-10 монет по изменению цены за 24 часа"
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка при получении альтернативных трендовых монет: {str(e)}")
+
+
 
 @app.get("/crypto/{coin_id}/technical-analysis")
 async def get_technical_analysis(coin_id: str, days: int = 30):
