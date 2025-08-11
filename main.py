@@ -65,6 +65,9 @@ class MarketData(BaseModel):
 # Конфигурация
 COINGECKO_API_BASE = "https://api.coingecko.com/api/v3"
 
+# Настройки HTTP клиента
+HTTP_CLIENT_CONFIG = {"verify": False}
+
 @app.get("/")
 async def root():
     """Корневой эндпоинт"""
@@ -98,7 +101,7 @@ async def metrics():
 async def get_crypto_prices(limit: int = 20, currency: str = "usd"):
     """Получить цены топ криптовалют с расширенной аналитикой"""
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**HTTP_CLIENT_CONFIG) as client:
             response = await client.get(
                 f"{COINGECKO_API_BASE}/coins/markets",
                 params={
@@ -142,10 +145,12 @@ async def get_crypto_prices(limit: int = 20, currency: str = "usd"):
         raise HTTPException(status_code=500, detail=f"Ошибка при получении данных: {str(e)}")
 
 @app.get("/crypto/{coin_id}", response_model=CryptoInfo)
+@track_request_metrics
+@track_api_call("coins/{coin_id}")
 async def get_crypto_info(coin_id: str):
     """Получить детальную информацию о криптовалюте"""
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**HTTP_CLIENT_CONFIG) as client:
             response = await client.get(f"{COINGECKO_API_BASE}/coins/{coin_id}")
             response.raise_for_status()
             data = response.json()
@@ -175,10 +180,12 @@ async def get_crypto_info(coin_id: str):
         raise HTTPException(status_code=404, detail=f"Криптовалюта не найдена: {str(e)}")
 
 @app.get("/crypto/search/{query}")
+@track_request_metrics
+@track_api_call("search")
 async def search_crypto(query: str):
     """Поиск криптовалют"""
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**HTTP_CLIENT_CONFIG) as client:
             response = await client.get(f"{COINGECKO_API_BASE}/search", params={"query": query})
             response.raise_for_status()
             data = response.json()
@@ -195,11 +202,13 @@ async def search_crypto(query: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при поиске: {str(e)}")
 
-@app.get("/crypto/market-data", response_model=MarketData)
+@app.get("/crypto/market-stats", response_model=MarketData)
+@track_request_metrics
+@track_api_call("coins/markets")
 async def get_market_data():
     """Получить общую рыночную аналитику"""
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**HTTP_CLIENT_CONFIG) as client:
             # Получаем топ 100 криптовалют для анализа
             response = await client.get(
                 f"{COINGECKO_API_BASE}/coins/markets",
@@ -269,10 +278,12 @@ async def get_market_data():
         raise HTTPException(status_code=500, detail=f"Ошибка при получении рыночных данных: {str(e)}")
 
 @app.get("/crypto/trending")
+@track_request_metrics
+@track_api_call("search/trending")
 async def get_trending_coins():
     """Получить трендовые криптовалюты"""
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**HTTP_CLIENT_CONFIG) as client:
             # Используем правильный эндпоинт для трендовых монет
             response = await client.get(f"{COINGECKO_API_BASE}/search/trending")
             response.raise_for_status()
@@ -306,7 +317,7 @@ async def get_trending_coins():
 async def get_trending_alternative():
     """Альтернативный метод получения трендовых монет"""
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**HTTP_CLIENT_CONFIG) as client:
             response = await client.get(f"{COINGECKO_API_BASE}/coins/markets", params={
                 "vs_currency": "usd",
                 "order": "price_change_percentage_24h_desc",
@@ -343,7 +354,7 @@ async def get_trending_alternative():
 async def get_technical_analysis(coin_id: str, days: int = 30):
     """Получить технический анализ криптовалюты"""
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**HTTP_CLIENT_CONFIG) as client:
             # Получаем исторические данные
             response = await client.get(
                 f"{COINGECKO_API_BASE}/coins/{coin_id}/market_chart",
@@ -415,7 +426,7 @@ async def get_technical_analysis(coin_id: str, days: int = 30):
 async def get_price_history(coin_id: str, days: int = 30, currency: str = "usd"):
     """Получить историю цен криптовалюты"""
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**HTTP_CLIENT_CONFIG) as client:
             response = await client.get(
                 f"{COINGECKO_API_BASE}/coins/{coin_id}/market_chart",
                 params={

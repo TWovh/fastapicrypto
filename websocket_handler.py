@@ -5,6 +5,7 @@ import httpx
 from typing import Dict, Set, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 import logging
+from metrics import increment_websocket_connection, decrement_websocket_connection, increment_websocket_message
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,12 +19,14 @@ class ConnectionManager:
         await websocket.accept()
         self.active_connections.add(websocket)
         self.subscriptions[websocket] = set()
+        increment_websocket_connection()  # Увеличиваем счетчик метрик
         logger.info(f"Новое WebSocket соединение. Всего соединений: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
         if websocket in self.subscriptions:
             del self.subscriptions[websocket]
+        decrement_websocket_connection()  # Уменьшаем счетчик метрик
         logger.info(f"WebSocket соединение закрыто. Осталось соединений: {len(self.active_connections)}")
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
@@ -86,6 +89,7 @@ class CryptoWebSocketHandler:
                 coin_symbol = data.get("coin", "").upper()
                 if coin_symbol:
                     self.manager.subscribe_to_coin(websocket, coin_symbol)
+                    increment_websocket_message(coin_symbol)  # Увеличиваем счетчик сообщений
                     await self.manager.send_personal_message(
                         json.dumps({
                             "type": "subscription",
@@ -174,7 +178,7 @@ class CryptoWebSocketHandler:
         while self.is_running:
             try:
                 # Получаем реальные данные от CoinGecko
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(verify=False) as client:
                     response = await client.get(
                         "https://api.coingecko.com/api/v3/coins/markets",
                         params={
