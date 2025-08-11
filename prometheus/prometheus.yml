@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus сам себя мониторит
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Наше FastAPI приложение
+  - job_name: 'crypto-api'
+    static_configs:
+      - targets: ['crypto-api:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # CoinGecko API (внешний мониторинг)
+  - job_name: 'coingecko-api'
+    static_configs:
+      - targets: ['api.coingecko.com']
+    metrics_path: '/api/v3/ping'
+    scrape_interval: 30s 

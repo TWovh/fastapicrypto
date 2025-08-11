@@ -4,10 +4,10 @@ from pydantic import BaseModel
 import httpx
 import asyncio
 from typing import List, Optional, Dict
-import os
 from dotenv import load_dotenv
 from websocket_handler import websocket_handler
 from technical_analysis import TechnicalAnalysis
+from metrics import get_metrics, track_request_metrics, track_api_call, update_crypto_metrics
 import datetime
 
 load_dotenv()
@@ -88,7 +88,13 @@ async def health_check():
     """Проверка здоровья API"""
     return {"status": "healthy", "service": "crypto-analytics-api"}
 
+@app.get("/metrics")
+async def metrics():
+    return get_metrics()
+
 @app.get("/crypto/prices", response_model=List[CryptoPrice])
+@track_request_metrics
+@track_api_call("coins/markets")
 async def get_crypto_prices(limit: int = 20, currency: str = "usd"):
     """Получить цены топ криптовалют с расширенной аналитикой"""
     try:
@@ -108,6 +114,13 @@ async def get_crypto_prices(limit: int = 20, currency: str = "usd"):
             
             crypto_prices = []
             for coin in data:
+                # Обновляем метрики Prometheus
+                update_crypto_metrics(
+                    symbol=coin["symbol"],
+                    price=coin["current_price"],
+                    market_cap=coin.get("market_cap")
+                )
+                
                 crypto_prices.append(CryptoPrice(
                     symbol=coin["symbol"].upper(),
                     price=coin["current_price"],
