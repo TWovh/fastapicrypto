@@ -1,8 +1,8 @@
 import numpy as np
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 import math
 
-class TechnicalAnalysis:
+class TechnicalAnalyzer:
     """Класс для технического анализа криптовалют"""
     
     @staticmethod
@@ -85,7 +85,7 @@ class TechnicalAnalysis:
         if len(prices) < period:
             return {"upper": [], "middle": [], "lower": []}
         
-        sma_values = TechnicalAnalysis.calculate_sma(prices, period)
+        sma_values = TechnicalAnalyzer.calculate_sma(prices, period)
         upper_band = []
         lower_band = []
         
@@ -117,8 +117,8 @@ class TechnicalAnalysis:
         if len(prices) < slow_period:
             return {"macd": [], "signal": [], "histogram": []}
         
-        ema_fast = TechnicalAnalysis.calculate_ema(prices, fast_period)
-        ema_slow = TechnicalAnalysis.calculate_ema(prices, slow_period)
+        ema_fast = TechnicalAnalyzer.calculate_ema(prices, fast_period)
+        ema_slow = TechnicalAnalyzer.calculate_ema(prices, slow_period)
         
         # Вычисляем MACD линию
         macd_line = []
@@ -129,7 +129,7 @@ class TechnicalAnalysis:
             macd_line.append(macd_value)
         
         # Вычисляем сигнальную линию
-        signal_line = TechnicalAnalysis.calculate_ema(macd_line, signal_period)
+        signal_line = TechnicalAnalyzer.calculate_ema(macd_line, signal_period)
         
         # Вычисляем гистограмму
         histogram = []
@@ -167,7 +167,7 @@ class TechnicalAnalysis:
             k_values.append(k)
         
         # Вычисляем %D (сглаженная %K)
-        d_values = TechnicalAnalysis.calculate_sma(k_values, d_period)
+        d_values = TechnicalAnalyzer.calculate_sma(k_values, d_period)
         
         return {
             "k": k_values,
@@ -218,7 +218,7 @@ class TechnicalAnalysis:
             true_ranges.append(true_range)
         
         # Вычисляем ATR как EMA от True Range
-        atr_values = TechnicalAnalysis.calculate_ema(true_ranges, period)
+        atr_values = TechnicalAnalyzer.calculate_ema(true_ranges, period)
         
         return atr_values
     
@@ -228,8 +228,8 @@ class TechnicalAnalysis:
         if len(prices) < sma_long:
             return {"trend": "недостаточно данных", "strength": "неизвестно"}
         
-        sma_short_values = TechnicalAnalysis.calculate_sma(prices, sma_short)
-        sma_long_values = TechnicalAnalysis.calculate_sma(prices, sma_long)
+        sma_short_values = TechnicalAnalyzer.calculate_sma(prices, sma_short)
+        sma_long_values = TechnicalAnalyzer.calculate_sma(prices, sma_long)
         
         if not sma_short_values or not sma_long_values:
             return {"trend": "недостаточно данных", "strength": "неизвестно"}
@@ -302,4 +302,45 @@ class TechnicalAnalysis:
         return {
             "volume_trend": volume_trend,
             "price_volume_correlation": price_volume_correlation
+        }
+    
+    @staticmethod
+    def analyze(historical_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Полный технический анализ исторических данных"""
+        if not historical_data or len(historical_data) < 20:
+            return {"error": "Недостаточно данных для анализа"}
+        
+        # Извлекаем цены
+        prices = [item.get('price', 0) for item in historical_data]
+        
+        # Вычисляем индикаторы
+        sma_20 = TechnicalAnalyzer.calculate_sma(prices, 20)
+        sma_50 = TechnicalAnalyzer.calculate_sma(prices, 50)
+        rsi = TechnicalAnalyzer.calculate_rsi(prices, 14)
+        macd = TechnicalAnalyzer.calculate_macd(prices)
+        bollinger = TechnicalAnalyzer.calculate_bollinger_bands(prices)
+        
+        # Анализ тренда
+        trend_analysis = TechnicalAnalyzer.get_trend_analysis(prices)
+        
+        # Анализ объема (если есть данные)
+        volumes = [item.get('volume', 0) for item in historical_data]
+        volume_analysis = TechnicalAnalyzer.get_volume_analysis(prices, volumes) if any(volumes) else {}
+        
+        return {
+            "sma_20": sma_20[-1] if sma_20 else None,
+            "sma_50": sma_50[-1] if sma_50 else None,
+            "rsi": rsi[-1] if rsi else None,
+            "macd": {
+                "macd": macd["macd"][-1] if macd["macd"] else None,
+                "signal": macd["signal"][-1] if macd["signal"] else None,
+                "histogram": macd["histogram"][-1] if macd["histogram"] else None
+            },
+            "bollinger_bands": {
+                "upper": bollinger["upper"][-1] if bollinger["upper"] else None,
+                "middle": bollinger["middle"][-1] if bollinger["middle"] else None,
+                "lower": bollinger["lower"][-1] if bollinger["lower"] else None
+            },
+            "trend_analysis": trend_analysis,
+            "volume_analysis": volume_analysis
         } 

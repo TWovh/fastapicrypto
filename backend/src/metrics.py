@@ -18,14 +18,14 @@ REQUEST_DURATION = Histogram(
 
 # Метрики для API вызовов
 API_CALLS = Counter(
-    'coingecko_api_calls_total',
-    'Total CoinGecko API calls',
+    'coinmarketcap_api_calls_total',
+    'Total CoinMarketCap API calls',
     ['endpoint', 'status']
 )
 
 API_CALL_DURATION = Histogram(
-    'coingecko_api_call_duration_seconds',
-    'CoinGecko API call duration in seconds',
+    'coinmarketcap_api_call_duration_seconds',
+    'CoinMarketCap API call duration in seconds',
     ['endpoint']
 )
 
@@ -141,4 +141,25 @@ def decrement_websocket_connection():
 
 def increment_websocket_message(coin_symbol: str):
     """Увеличение счетчика WebSocket сообщений"""
-    WEBSOCKET_MESSAGES.labels(coin_symbol=coin_symbol.upper()).inc() 
+    WEBSOCKET_MESSAGES.labels(coin_symbol=coin_symbol.upper()).inc()
+
+def setup_metrics(app):
+    """Настройка метрик для FastAPI приложения"""
+    @app.get("/metrics")
+    async def metrics_endpoint():
+        return get_metrics()
+
+def record_request(endpoint: str):
+    """Запись метрики HTTP запроса"""
+    REQUEST_COUNT.labels(
+        method='GET',
+        endpoint=endpoint,
+        status=200
+    ).inc()
+
+def record_api_call(api_name: str, endpoint: str):
+    """Запись метрики вызова API"""
+    API_CALLS.labels(
+        endpoint=f"{api_name}_{endpoint}",
+        status='success'
+    ).inc() 
